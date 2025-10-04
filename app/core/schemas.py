@@ -70,6 +70,9 @@ class OpenMeteoCurrent(BaseModel):
     cloud_cover: Optional[float] = None  # %
     weather_code: Optional[int] = None
     is_day: Optional[bool] = None
+    surface_pressure: Optional[float] = None  # hPa
+    dew_point_2m: Optional[float] = None  # °C
+    visibility: Optional[float] = None  # m
 
 
 class OpenMeteoHourly(BaseModel):
@@ -88,6 +91,17 @@ class OpenMeteoHourly(BaseModel):
     dew_point_2m: List[Optional[float]]
     is_day: List[Optional[bool]]
     visibility: List[Optional[float]]
+    surface_pressure: List[Optional[float]]
+    pressure_msl: List[Optional[float]]
+    cloud_cover_low: List[Optional[float]]
+    cloud_cover_mid: List[Optional[float]]
+    cloud_cover_high: List[Optional[float]]
+    rain: List[Optional[float]]
+    showers: List[Optional[float]]
+    snowfall: List[Optional[float]]
+    evapotranspiration: List[Optional[float]]
+    et0_fao_evapotranspiration: List[Optional[float]]
+    vapour_pressure_deficit: List[Optional[float]]
 
 
 class OpenMeteoDaily(BaseModel):
@@ -100,6 +114,8 @@ class OpenMeteoDaily(BaseModel):
     apparent_temperature_min: List[Optional[float]]
     precipitation_sum: List[Optional[float]]
     rain_sum: List[Optional[float]]
+    showers_sum: List[Optional[float]]
+    snowfall_sum: List[Optional[float]]
     precipitation_hours: List[Optional[float]]
     precipitation_probability_max: List[Optional[float]]
     wind_speed_10m_max: List[Optional[float]]
@@ -110,6 +126,17 @@ class OpenMeteoDaily(BaseModel):
     sunrise: List[Optional[datetime]]
     sunset: List[Optional[datetime]]
     daylight_duration: List[Optional[float]]
+    surface_pressure_max: List[Optional[float]]
+    surface_pressure_min: List[Optional[float]]
+    pressure_msl_max: List[Optional[float]]
+    pressure_msl_min: List[Optional[float]]
+    cloud_cover_max: List[Optional[float]]
+    cloud_cover_low_max: List[Optional[float]]
+    cloud_cover_mid_max: List[Optional[float]]
+    cloud_cover_high_max: List[Optional[float]]
+    evapotranspiration_sum: List[Optional[float]]
+    et0_fao_evapotranspiration_sum: List[Optional[float]]
+    vapour_pressure_deficit_max: List[Optional[float]]
 
 
 class RiskScore(BaseModel):

@@ -140,9 +140,9 @@ def create_paradeguard_map(
     # Create tooltip
     tooltip = create_tooltip_html(address, date, time_window)
     
-    # Create the deck
+    # Create the deck with a default map style that doesn't require API key
     deck = pdk.Deck(
-        map_style="mapbox://styles/mapbox/light-v10",
+        map_style=None,  # Use default map style
         initial_view_state=view_state,
         layers=layers,
         tooltip=tooltip

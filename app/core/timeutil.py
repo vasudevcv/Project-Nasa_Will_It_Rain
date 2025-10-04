@@ -71,12 +71,23 @@ def slice_hourly_data_for_window(
     filtered_data = []
     
     for i, dt in enumerate(times):
-        if dt >= start_datetime and dt < end_datetime:
-            filtered_times.append(dt)
-            if i < len(data):
-                filtered_data.append(data[i])
+        # Ensure dt is timezone-aware for comparison
+        if dt is not None:
+            if dt.tzinfo is None:
+                # Assume UTC if no timezone info
+                dt_aware = dt.replace(tzinfo=pytz.UTC)
             else:
-                filtered_data.append(None)
+                dt_aware = dt
+            
+            # Convert to local timezone for comparison
+            dt_local = dt_aware.astimezone(local_tz)
+            
+            if dt_local >= start_datetime and dt_local < end_datetime:
+                filtered_times.append(dt_local)
+                if i < len(data):
+                    filtered_data.append(data[i])
+                else:
+                    filtered_data.append(None)
     
     return filtered_times, filtered_data
 

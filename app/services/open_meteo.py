@@ -46,8 +46,7 @@ def get_forecast_data(
             "timezone": "auto",
             "current": "temperature_2m,apparent_temperature,precipitation,wind_speed_10m,wind_direction_10m,wind_gusts_10m,relative_humidity_2m,cloud_cover,weather_code,is_day",
             "hourly": "temperature_2m,apparent_temperature,precipitation,precipitation_probability,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,relative_humidity_2m,cloud_cover,dew_point_2m,is_day,visibility",
-            "daily": "weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_sum,rain_sum,precipitation_hours,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,shortwave_radiation_sum,uv_index_max,sunrise,sunset,daylight_duration",
-            "models": "best_match,ecmwf_ifs,jma_seamless,cma_grapes_global"
+            "daily": "weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_sum,rain_sum,precipitation_hours,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,shortwave_radiation_sum,uv_index_max,sunrise,sunset,daylight_duration"
         }
         
         # Add date range if provided
@@ -79,7 +78,10 @@ def get_forecast_data(
                     relative_humidity_2m=current_data.get("relative_humidity_2m"),
                     cloud_cover=current_data.get("cloud_cover"),
                     weather_code=current_data.get("weather_code"),
-                    is_day=current_data.get("is_day")
+                    is_day=current_data.get("is_day"),
+                    surface_pressure=None,  # Not requested in simplified version
+                    dew_point_2m=None,  # Not requested in simplified version
+                    visibility=None  # Not requested in simplified version
                 )
             
             # Parse hourly data
@@ -109,7 +111,18 @@ def get_forecast_data(
                     cloud_cover=hourly_data.get("cloud_cover", []),
                     dew_point_2m=hourly_data.get("dew_point_2m", []),
                     is_day=hourly_data.get("is_day", []),
-                    visibility=hourly_data.get("visibility", [])
+                    visibility=hourly_data.get("visibility", []),
+                    surface_pressure=[],  # Not requested in simplified version
+                    pressure_msl=[],  # Not requested in simplified version
+                    cloud_cover_low=[],  # Not requested in simplified version
+                    cloud_cover_mid=[],  # Not requested in simplified version
+                    cloud_cover_high=[],  # Not requested in simplified version
+                    rain=[],  # Not requested in simplified version
+                    showers=[],  # Not requested in simplified version
+                    snowfall=[],  # Not requested in simplified version
+                    evapotranspiration=[],  # Not requested in simplified version
+                    et0_fao_evapotranspiration=[],  # Not requested in simplified version
+                    vapour_pressure_deficit=[]  # Not requested in simplified version
                 )
             
             # Parse daily data
@@ -150,6 +163,8 @@ def get_forecast_data(
                     apparent_temperature_min=daily_data.get("apparent_temperature_min", []),
                     precipitation_sum=daily_data.get("precipitation_sum", []),
                     rain_sum=daily_data.get("rain_sum", []),
+                    showers_sum=[],  # Not requested in simplified version
+                    snowfall_sum=[],  # Not requested in simplified version
                     precipitation_hours=daily_data.get("precipitation_hours", []),
                     precipitation_probability_max=daily_data.get("precipitation_probability_max", []),
                     wind_speed_10m_max=daily_data.get("wind_speed_10m_max", []),
@@ -159,7 +174,18 @@ def get_forecast_data(
                     uv_index_max=daily_data.get("uv_index_max", []),
                     sunrise=sunrise_times,
                     sunset=sunset_times,
-                    daylight_duration=daily_data.get("daylight_duration", [])
+                    daylight_duration=daily_data.get("daylight_duration", []),
+                    surface_pressure_max=[],  # Not requested in simplified version
+                    surface_pressure_min=[],  # Not requested in simplified version
+                    pressure_msl_max=[],  # Not requested in simplified version
+                    pressure_msl_min=[],  # Not requested in simplified version
+                    cloud_cover_max=[],  # Not requested in simplified version
+                    cloud_cover_low_max=[],  # Not requested in simplified version
+                    cloud_cover_mid_max=[],  # Not requested in simplified version
+                    cloud_cover_high_max=[],  # Not requested in simplified version
+                    evapotranspiration_sum=[],  # Not requested in simplified version
+                    et0_fao_evapotranspiration_sum=[],  # Not requested in simplified version
+                    vapour_pressure_deficit_max=[]  # Not requested in simplified version
                 )
             
             logger.info("Successfully fetched forecast data from Open-Meteo")

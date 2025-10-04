@@ -234,9 +234,10 @@ def display_results(result: UnifiedResult):
     # Above-the-fold summary
     display_summary(result)
     
-    # Tabs for detailed views
+    # Enhanced tabs with better organization
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
-        "🌧️ Rain", "🌡️ Heat/Comfort", "💨 Wind", "☁️ Sky/UV", "📊 Pressure", "🔬 Advanced", "📈 Historical", "🗺️ Map"
+        "🌧️ Rain Forecast", "🌡️ Temperature & Comfort", "💨 Wind Conditions", "☁️ Sky & UV", 
+        "📊 Atmospheric Pressure", "🔬 Advanced Analytics", "📈 Historical Context", "🗺️ Location Map"
     ])
     
     with tab1:
@@ -262,6 +263,112 @@ def display_results(result: UnifiedResult):
     
     with tab8:
         display_map_tab(result)
+    
+    # Add comprehensive data insights section
+    st.markdown("---")
+    st.subheader("📈 Comprehensive Weather Insights")
+    
+    # Create insights in a grid layout
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### 🎯 Event Planning Insights")
+        
+        # Weather suitability score
+        if result.risk_score:
+            risk_score = result.risk_score.composite_score
+            suitability_score = 100 - risk_score
+            
+            if suitability_score > 80:
+                st.success(f"**Event Suitability: {suitability_score:.0f}/100** - Excellent conditions!")
+            elif suitability_score > 60:
+                st.info(f"**Event Suitability: {suitability_score:.0f}/100** - Good conditions with minor concerns")
+            elif suitability_score > 40:
+                st.warning(f"**Event Suitability: {suitability_score:.0f}/100** - Moderate conditions, plan accordingly")
+            else:
+                st.error(f"**Event Suitability: {suitability_score:.0f}/100** - Challenging conditions, consider alternatives")
+        
+        # Time-based recommendations
+        st.markdown("**⏰ Time-Based Recommendations:**")
+        if result.hourly and result.hourly.precipitation_probability:
+            # Find best and worst times
+            prob_data = []
+            for i, prob in enumerate(result.hourly.precipitation_probability):
+                if prob is not None and i < len(result.hourly.time):
+                    prob_data.append((result.hourly.time[i], prob))
+            
+            if prob_data:
+                prob_data.sort(key=lambda x: x[1])
+                best_time = prob_data[0][0]
+                worst_time = prob_data[-1][0]
+                
+                st.write(f"• **Best time:** {best_time.strftime('%H:%M')} (Rain risk: {prob_data[0][1]:.0f}%)")
+                st.write(f"• **Avoid:** {worst_time.strftime('%H:%M')} (Rain risk: {prob_data[-1][1]:.0f}%)")
+    
+    with col2:
+        st.markdown("#### 📊 Data Quality & Sources")
+        
+        # Data availability indicators
+        st.markdown("**Data Sources Status:**")
+        
+        sources_status = {
+            "🌍 Geocoding": "✅ Active" if result.geocode else "❌ Unavailable",
+            "🌤️ Current Weather": "✅ Active" if result.current_openmeteo else "❌ Unavailable", 
+            "📈 Hourly Forecast": "✅ Active" if result.hourly else "❌ Unavailable",
+            "📅 Daily Forecast": "✅ Active" if result.daily else "❌ Unavailable",
+            "📊 Historical Data": "✅ Active" if result.historical else "❌ Unavailable",
+            "⚖️ Risk Assessment": "✅ Active" if result.risk_score else "❌ Unavailable"
+        }
+        
+        for source, status in sources_status.items():
+            st.write(f"• {source}: {status}")
+        
+        # Confidence indicators
+        if result.risk_score:
+            confidence = result.risk_score.confidence
+            st.markdown(f"**Overall Confidence:** {confidence}")
+            
+            if confidence == "High":
+                st.success("High confidence in weather predictions")
+            elif confidence == "Medium":
+                st.info("Moderate confidence in weather predictions")
+            else:
+                st.warning("Lower confidence - conditions may change")
+    
+    # Add weather trends section
+    st.markdown("#### 📈 Weather Trends & Patterns")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("**🌡️ Temperature Trend**")
+        if result.hourly and result.hourly.temperature_2m:
+            temps = [t for t in result.hourly.temperature_2m if t is not None]
+            if len(temps) > 1:
+                temp_trend = "Rising" if temps[-1] > temps[0] else "Falling"
+                temp_change = abs(temps[-1] - temps[0])
+                st.write(f"• Trend: {temp_trend}")
+                st.write(f"• Change: {temp_change:.1f}°C")
+    
+    with col2:
+        st.markdown("**🌧️ Precipitation Trend**")
+        if result.hourly and result.hourly.precipitation:
+            precip = [p for p in result.hourly.precipitation if p is not None]
+            if precip:
+                total_precip = sum(precip)
+                max_precip = max(precip)
+                st.write(f"• Total: {total_precip:.1f} mm")
+                st.write(f"• Peak: {max_precip:.1f} mm/h")
+    
+    with col3:
+        st.markdown("**💨 Wind Trend**")
+        if result.hourly and result.hourly.wind_speed_10m:
+            winds = [w for w in result.hourly.wind_speed_10m if w is not None]
+            if winds:
+                avg_wind = sum(winds) / len(winds)
+                max_wind = max(winds)
+                st.write(f"• Average: {avg_wind:.1f} km/h")
+                st.write(f"• Peak: {max_wind:.1f} km/h")
     
     # Export section
     display_export_section(result)
@@ -507,6 +614,87 @@ def display_summary(result: UnifiedResult):
                 compass_direction = directions[direction_index]
                 st.write(f"**Direction:** {compass_direction}")
     
+    # Add comprehensive weather overview
+    st.subheader("📋 Weather Overview & Recommendations")
+    
+    # Create a comprehensive overview with recommendations
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.markdown("**🎯 Event Readiness**")
+        if result.risk_score:
+            risk_score = result.risk_score.composite_score
+            if risk_score < 30:
+                st.success("✅ **Excellent conditions** for outdoor events")
+                st.write("• Low weather risk")
+                st.write("• Comfortable conditions")
+            elif risk_score < 60:
+                st.warning("⚠️ **Moderate conditions** - plan accordingly")
+                st.write("• Some weather concerns")
+                st.write("• Monitor conditions")
+            else:
+                st.error("❌ **Challenging conditions** - consider alternatives")
+                st.write("• High weather risk")
+                st.write("• Indoor backup recommended")
+    
+    with col2:
+        st.markdown("**👕 Clothing Recommendations**")
+        if result.current_openmeteo and result.current_openmeteo.apparent_temperature:
+            temp = result.current_openmeteo.apparent_temperature
+            if temp < 15:
+                st.write("🧥 **Cold weather gear**")
+                st.write("• Warm jacket required")
+                st.write("• Layer clothing")
+            elif temp < 25:
+                st.write("👔 **Light layers**")
+                st.write("• Comfortable clothing")
+                st.write("• Light jacket optional")
+            else:
+                st.write("👕 **Light clothing**")
+                st.write("• Breathable fabrics")
+                st.write("• Sun protection")
+    
+    with col3:
+        st.markdown("**🌂 Umbrella & Protection**")
+        if result.hourly and result.hourly.precipitation_probability:
+            max_prob = max([p for p in result.hourly.precipitation_probability if p is not None], default=0)
+            if max_prob > 70:
+                st.write("☔ **Umbrella essential**")
+                st.write("• High rain probability")
+                st.write("• Waterproof gear needed")
+            elif max_prob > 40:
+                st.write("🌂 **Umbrella recommended**")
+                st.write("• Moderate rain risk")
+                st.write("• Light protection")
+            else:
+                st.write("☀️ **No umbrella needed**")
+                st.write("• Low rain probability")
+                st.write("• Clear conditions")
+    
+    with col4:
+        st.markdown("**⏰ Best Time Windows**")
+        if result.hourly and result.hourly.precipitation_probability:
+            # Find the best 3-hour window
+            best_windows = []
+            for i in range(len(result.hourly.precipitation_probability) - 2):
+                if i + 2 < len(result.hourly.time):
+                    window_prob = sum([
+                        result.hourly.precipitation_probability[i],
+                        result.hourly.precipitation_probability[i+1],
+                        result.hourly.precipitation_probability[i+2]
+                    ]) / 3
+                    if window_prob is not None:
+                        best_windows.append((result.hourly.time[i], window_prob))
+            
+            if best_windows:
+                best_windows.sort(key=lambda x: x[1])
+                best_time = best_windows[0][0]
+                best_prob = best_windows[0][1]
+                
+                st.write(f"🕐 **{best_time.strftime('%H:%M')} - {(best_time + timedelta(hours=3)).strftime('%H:%M')}**")
+                st.write(f"• Rain risk: {best_prob:.0f}%")
+                st.write("• Optimal timing")
+    
     st.markdown("---")
 
 
@@ -517,6 +705,19 @@ def display_rain_tab(result: UnifiedResult):
         st.warning("Hourly forecast data not available.")
         return
     
+    # Enhanced header with key insights
+    st.markdown("### 🌧️ Rain Forecast Analysis")
+    
+    # Quick rain assessment
+    if result.hourly.precipitation_probability:
+        max_prob = max([p for p in result.hourly.precipitation_probability if p is not None], default=0)
+        if max_prob > 70:
+            st.error("⚠️ **High rain risk detected** - Consider indoor alternatives")
+        elif max_prob > 40:
+            st.warning("🌧️ **Moderate rain risk** - Bring umbrella")
+        else:
+            st.success("☀️ **Low rain risk** - Good conditions for outdoor activities")
+    
     # Get daypart stats
     daypart_stats = get_daypart_stats(
         result.hourly.time,
@@ -526,14 +727,16 @@ def display_rain_tab(result: UnifiedResult):
         result.timezone
     )
     
-    # Summary metrics
+    # Enhanced summary metrics with better visual design
+    st.markdown("#### 📊 Key Rain Metrics")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         if daypart_stats["sum"] is not None:
-            st.metric("Expected Rain", f"{daypart_stats['sum']:.1f} mm")
+            st.metric("Expected Rain", f"{daypart_stats['sum']:.1f} mm", 
+                     delta=f"{daypart_stats['sum']:.1f} mm in {result.inputs.time_window}")
         else:
-            st.metric("Expected Rain", "N/A")
+            st.metric("Expected Rain", "0.0 mm", delta="No rain expected")
     
     with col2:
         if result.hourly.precipitation_probability:
@@ -545,22 +748,25 @@ def display_rain_tab(result: UnifiedResult):
                 result.timezone
             )
             if prob_stats["max"] is not None:
-                st.metric("Max Rain Probability", f"{prob_stats['max']:.0f}%")
+                st.metric("Max Rain Probability", f"{prob_stats['max']:.0f}%", 
+                         delta=f"Peak risk: {prob_stats['max']:.0f}%")
             else:
-                st.metric("Max Rain Probability", "N/A")
+                st.metric("Max Rain Probability", "0%", delta="Low risk")
     
     with col3:
         if daypart_stats["max"] is not None:
-            st.metric("Peak Intensity", f"{daypart_stats['max']:.1f} mm/h")
+            st.metric("Peak Intensity", f"{daypart_stats['max']:.1f} mm/h", 
+                     delta="Heavy rain possible" if daypart_stats['max'] > 2 else "Light rain")
         else:
-            st.metric("Peak Intensity", "N/A")
+            st.metric("Peak Intensity", "0.0 mm/h", delta="No heavy rain")
     
     with col4:
         if result.daily and result.daily.precipitation_sum:
             daily_precip = result.daily.precipitation_sum[0] if result.daily.precipitation_sum[0] is not None else 0
-            st.metric("Daily Total", f"{daily_precip:.1f} mm")
+            st.metric("Daily Total", f"{daily_precip:.1f} mm", 
+                     delta="24-hour accumulation")
         else:
-            st.metric("Daily Total", "N/A")
+            st.metric("Daily Total", "0.0 mm", delta="Dry day expected")
     
     # Hourly chart
     if result.hourly.time and result.hourly.precipitation:
@@ -693,6 +899,21 @@ def display_heat_comfort_tab(result: UnifiedResult):
     if not result.hourly:
         st.warning("Hourly forecast data not available.")
         return
+    
+    # Enhanced header with comfort assessment
+    st.markdown("### 🌡️ Temperature & Comfort Analysis")
+    
+    # Quick comfort assessment
+    if result.current_openmeteo and result.current_openmeteo.apparent_temperature:
+        temp = result.current_openmeteo.apparent_temperature
+        if temp < 15:
+            st.error("🥶 **Cold conditions** - Warm clothing essential")
+        elif temp > 35:
+            st.error("🔥 **Hot conditions** - Stay hydrated, seek shade")
+        elif temp > 30:
+            st.warning("🌡️ **Warm conditions** - Light clothing recommended")
+        else:
+            st.success("😊 **Comfortable conditions** - Ideal for outdoor activities")
     
     # Get daypart stats
     temp_stats = get_daypart_stats(
@@ -876,6 +1097,21 @@ def display_wind_tab(result: UnifiedResult):
     if not result.hourly:
         st.warning("Hourly forecast data not available.")
         return
+    
+    # Enhanced header with wind assessment
+    st.markdown("### 💨 Wind Conditions Analysis")
+    
+    # Quick wind assessment
+    if result.current_openmeteo and result.current_openmeteo.wind_speed_10m:
+        wind_speed = result.current_openmeteo.wind_speed_10m
+        if wind_speed > 50:
+            st.error("🌪️ **Very strong winds** - Avoid outdoor activities")
+        elif wind_speed > 35:
+            st.warning("💨 **Strong winds** - Secure loose items")
+        elif wind_speed > 20:
+            st.info("🌬️ **Moderate winds** - Normal outdoor activities OK")
+        else:
+            st.success("🍃 **Light winds** - Perfect for outdoor events")
     
     # Get daypart stats
     wind_stats = get_daypart_stats(

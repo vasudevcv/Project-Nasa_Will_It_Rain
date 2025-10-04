@@ -1,0 +1,219 @@
+---
+alwaysApply: true
+---
+# cursor.rules.mdc
+# Project: ParadeGuard — NASA “Will it Rain on My Parade?” Dashboard
+# Owner: Vaishnavu C V
+# Goal: Streamlit app where users query a place + date/time window and get a clear rain/comfort risk verdict, charts, map, and CSV/JSON export.
+# Scope: Implement MVP in one codebase; ensure clean architecture, secrets hygiene, robust error handling, and fast UX.
+
+## 0) Tech Stack & Non-Functional Requirements
+- Python 3.10+
+- Streamlit (UI)
+- requests/httpx (API calls), tenacity (retry)
+- pydantic (response models)
+- pandas, numpy (data ops)
+- plotly (charts) + pydeck (map)  [no seaborn]
+- python-dotenv for local dev
+- Cache: `st.cache_data` for API responses (per (lat,lon,date,model))
+- Target TTI: < 2s on Wi-Fi for single-location, single-date
+- Reliability: graceful fallback and user-readable errors
+- Security: never log secrets; load via ENV; .env in .gitignore
+
+## 1) Directory & Files
+- `app/`
+  - `app.py`                   # Streamlit entrypoint (single-page MVP with sections; optional tabs)
+  - `services/`
+    - `geocode.py`            # Google Geocoding → lat/lon
+    - `google_weather.py`     # Google Weather current conditions
+    - `meteostat.py`          # Meteostat monthly climatology via RapidAPI
+    - `open_meteo.py`         # Open-Meteo hourly/daily/current (multi-model)
+  - `core/`
+    - `schemas.py`            # Pydantic models for API inputs/outputs
+    - `risk.py`               # Composite risk scoring & thresholds
+    - `timeutil.py`           # TZ handling, date ranges, “evening” windows
+    - `exporter.py`           # CSV/JSON export
+    - `maputil.py`            # Map helpers (pydeck layers)
+  - `assets/`                 # Logos, icons (WMO code legend)
+- `.env.example`
+- `requirements.txt`
+- `README.md`
+- `.gitignore` (include `.env`, `__pycache__`, `.streamlit/secrets.toml`)
+
+## 2) Environment Variables (MANDATORY)
+- `GOOGLE_MAPS_API_KEY`         # Geocoding
+- `GOOGLE_WEATHER_API_KEY`      # Google Weather API
+- `RAPIDAPI_KEY`                # Meteostat via RapidAPI
+- (No key needed for Open-Meteo)
+> Do not hardcode; never print keys; do not commit .env.
+
+## 3) External Endpoints (Authoritative)
+### Google Geocoding → lat/lon
+- GET `https://maps.googleapis.com/maps/api/geocode/json`
+- Query: `address=<user_input>` + `key=${GOOGLE_MAPS_API_KEY}`
+- Parse first result: formatted_address, geometry.location.{lat,lng}
+- On 0 results → show actionable error.
+
+### Google Weather — Current Conditions (Nowcast snapshot)
+- GET `https://weather.googleapis.com/v1/currentConditions:lookup`
+- Query: `key=${GOOGLE_WEATHER_API_KEY}`, `location.latitude`, `location.longitude`
+- Use: precipitation.probability.percent, precipitation.qpf.quantity, thunderstormProbability, temperature, feelsLike, dewPoint, rh, wind (speed/gust/dir), uvIndex, visibility, cloudCover, weatherCondition.type
+
+### Meteostat — Monthly Climatology (Historical Baseline)
+- GET `https://meteostat.p.rapidapi.com/point/monthly`
+- Headers:
+  - `x-rapidapi-host: meteostat.p.rapidapi.com`
+  - `x-rapidapi-key: ${RAPIDAPI_KEY}`
+- Query: `lat`, `lon`, `alt` (optional), `start=YYYY-01-01`, `end=YYYY-12-31`
+- Use: `prcp` (mm), `tavg/tmin/tmax`, `tsun` (sunshine hours), `pres`
+- Baseline: compute 10-year same-month stats if time permits; MVP may use 1–5y.
+
+### Open-Meteo — Forecast & Current (Core Timeseries)
+- GET `https://api.open-meteo.com/v1/forecast`
+- Query:
+  - `latitude`, `longitude`, `timezone=auto`
+  - `current=temperature_2m,apparent_temperature,precipitation,wind_speed_10m,wind_direction_10m,wind_gusts_10m,relative_humidity_2m,cloud_cover,weather_code,is_day`
+  - `hourly=temperature_2m,apparent_temperature,precipitation,precipitation_probability,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,relative_humidity_2m,cloud_cover,dew_point_2m,is_day,visibility`
+  - `daily=weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_sum,rain_sum,precipitation_hours,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,shortwave_radiation_sum,uv_index_max,sunrise,sunset,daylight_duration`
+  - `models=best_match,ecmwf_ifs,jma_seamless,cma_grapes_global`
+  - Optional date window: `start_date`, `end_date` if required by design.
+
+## 4) UI/UX Contract (Streamlit)
+### Query Panel (top)
+- Inputs: Place (text), Date picker (single date), Time of day chips (Morning/Afternoon/Evening/Night), optional Range.
+- Button: “Analyze”
+- Echo resolved: `formatted_address`, lat/lon, timezone
+
+### Above-the-Fold Summary
+- Headline verdict (plain language): e.g., “High rain risk Wed 21 May, Evening”
+- Composite Risk Score (0–100) with RAG band + Confidence (Low/Med/High)
+- Quick stats chips: Rain Prob %, Expected Rain (mm), Apparent Temp (°C), Gusts (km/h)
+
+### Tabs/Sections
+- **Rain**: Plotly hourly bars `precipitation` + line `precipitation_probability`; daily pills (precip_sum, rain_sum, rainy_hours)
+- **Heat/Comfort**: lines for `temperature_2m`, `apparent_temperature`; humidity/ dewpoint badges; UX labels (“Humid discomfort likely”)
+- **Wind**: speed/gust lines + small wind-rose from aggregated `wind_direction_10m`
+- **Sky/UV**: cloud cover line; sunrise/sunset/daylight chips; UV max
+- **Historical Context**: month percentile (rain & temp) vs Meteostat baseline; simple bar vs month avg
+
+### Map Panel
+- pydeck map centered at lat/lon, zoom ~11, a pin layer
+- Tooltip with address + selected date/time window
+
+### Export
+- Buttons: “Export CSV” and “Export JSON” (download current query dataset with metadata: sources, model, timestamps, tz)
+
+### Null/Errors
+- If some fields null → show pill “Data unavailable from X; using Y fallback”
+- Friendly error banners when API fails, with retry CTA
+
+## 5) Risk Scoring (core/risk.py)
+- Composite Score (0–100) with weights:
+  - Rain/Wetness 40%
+  - Heat/Cold 25%
+  - Wind/Gust 20%
+  - Visibility/Cloud 15%
+- Thresholds (defaults; tuneable):
+  - Rain mm/h: drizzle ≥0.2, rain ≥1.0, heavy ≥4.0
+  - Rain probability: Elevated ≥50%, High ≥70%
+  - Apparent temp discomfort: cool <18°C, hot >32°C
+  - Gust risk: caution ≥35 km/h, high ≥55 km/h
+  - Cloud >80% → low sun; UV ≥7 → high exposure (daytime only)
+- Confidence score: combine (a) model agreement across chosen models (variance), (b) data completeness ratio, (c) proximity of event time (closer → higher)
+
+## 6) Business Logic
+- “Evening” window = 18:00–21:00 local time; compute stats subset for selected date/window.
+- Normalize all timeseries to local tz (`timezone=auto`).
+- Historical percentile: For selected month, compute user’s day’s expected rain vs Meteostat month distribution → percentile badge (e.g., “Top 20% wettest Mays”).
+- Multi-model: initially display `best_match`; optional chips to compare ECMWF/JMA/CMA.
+
+## 7) Services (coding standards)
+- Use `httpx` or `requests` with:
+  - timeout=10s, 3 retries (exponential backoff, jitter) via `tenacity`
+  - structured logging (INFO for requests, WARN on non-fatal fallbacks)
+  - pydantic schema validation; surface friendly errors if validation fails
+- Cache each call with `@st.cache_data(show_spinner=False, ttl=900)` keyed by inputs
+
+## 8) Schemas (core/schemas.py)
+- Pydantic models for:
+  - GeocodeResult { address: str, lat: float, lon: float }
+  - GoogleWeatherCurrent { time, is_day, condition, temp, feels_like, dew_point, rh, uv_index, precip_prob, precip_mm, tstorm_prob, wind {speed, gust, dir_deg}, visibility_km, cloud_pct }
+  - MeteostatMonthlyRow { date, tavg, tmin, tmax, prcp, tsun, pres }
+  - OpenMeteoCurrent, OpenMeteoHourly, OpenMeteoDaily (only fields used)
+  - UnifiedResult { inputs, geocode, now, hourly, daily, historical, risk_score, confidence, notes }
+
+## 9) Exporter (core/exporter.py)
+- `to_csv(UnifiedResult)`: flatten current, selected hourly window, daily summary, historical percentile, risk score; include metadata (tz, model, timestamps)
+- `to_json(UnifiedResult)`: full structure with version & sources
+- Streamlit `st.download_button` for both, filenames with ISO timestamps
+
+## 10) Map Utils (core/maputil.py)
+- Build pydeck Layer for pin at (lat, lon)
+- Optional: add translucent circle for area of interest
+
+## 11) UI Implementation (app/app.py)
+- Layout: left column inputs; right column summary + tabs; map below tabs (responsive)
+- Spinner during fetch; disable Analyze button while in-flight
+- Unit toggles (metric default)
+- Footnote: data sources + attribution; model run time; disclaimer
+
+## 12) Error Handling Matrix
+- Geocode 0 results → show “Place not found. Try broader name or pin on map.”
+- Google Weather 4xx/5xx → continue without nowcast; mark Now card as “unavailable”
+- Meteostat empty → hide Historical tab; show info banner
+- Open-Meteo failure → hard stop with clear message; keep inputs; allow retry
+
+## 13) Testing (happy path)
+- Delhi / Singapore / Pathanamthitta queries for a near date
+- Verify evening subset stats match plotted series
+- Export JSON/CSV roundtrip parse ok
+- Cache hit validates reduced API latency on repeated query
+
+## 14) Performance
+- Batch API calls concurrently where viable (optional `async` with httpx)
+- Cache per (lat,lon,date,model)
+- Debounce geocode input (only on click “Analyze”)
+
+## 15) Compliance & Attribution
+- Footer must show: “Sources: Google Geocoding, Google Weather, Meteostat, Open-Meteo (see README for licenses). WMO weather codes provided by Open-Meteo.”
+- Include README section with license notes and rate-limit guidance
+
+## 16) Acceptance Criteria (MVP)
+- [ ] User enters place → app resolves address + lat/lon
+- [ ] App returns verdict & risk score for selected date/time window
+- [ ] Rain/Temp/Wind/Sky charts render (hourly) + daily summary chips
+- [ ] Historical percentile badge shown (if Meteostat returns data)
+- [ ] Export CSV/JSON works and includes metadata
+- [ ] Errors are graceful; nulls labeled; UI stays responsive
+
+## 17) Coding Tasks (Cursor)
+1) Scaffold project structure & requirements.txt
+2) Implement `services/geocode.py` with Google Geocoding (env key)
+3) Implement `services/google_weather.py` (current conditions) (env key)
+4) Implement `services/meteostat.py` monthly call (RapidAPI key)
+5) Implement `services/open_meteo.py` hourly/daily/current fetch with selected params & models
+6) Implement `core/schemas.py` (pydantic), map all used fields
+7) Implement `core/risk.py` per thresholds & weighting; confidence calc
+8) Implement `core/timeutil.py` for local tz normalization + daypart extraction (“evening”)
+9) Implement `core/exporter.py` (CSV/JSON)
+10) Implement `core/maputil.py` (pydeck pin)
+11) Build `app/app.py` Streamlit UI: inputs → fetch → compute → render → export
+12) Wire cache & retries; add logging; handle nulls and fallbacks
+13) QA against 2–3 Asian cities; verify outputs
+
+## 18) .env.example
+GOOGLE_MAPS_API_KEY=replace_me
+GOOGLE_WEATHER_API_KEY=replace_me
+RAPIDAPI_KEY=replace_me
+
+## 19) Requirements (pin majors)
+streamlit
+requests
+httpx
+tenacity
+pydantic
+pandas
+numpy
+plotly
+pydeck
+python-dotenv
